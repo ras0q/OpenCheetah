@@ -19,11 +19,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#include "NonLinear/relu-field.h"
-#include "library_fixed.h"
 #include <fstream>
 #include <iostream>
 #include <thread>
+
+#include "NonLinear/relu-field.h"
+#include "library_fixed.h"
 
 #define LAN_EXEC
 #define MAX_THREADS 4
@@ -72,202 +73,212 @@ const std::map<std::string, std::vector<int>> layer_sizes{
           31360,  6272,   32928,  6272,   34496,  6272,   36064,  6272,
           37632,  6272,   39200,  6272,   40768,  6272,   42336,  6272,
           43904,  6272,   45472,  6272,   47040,  6272,   48608,  6272,
-          50176})},
+          50176}
+     )},
 };
 
 void field_relu_thread(int tid, uint64_t *z, uint64_t *x, int lnum_relu) {
-  ReLUFieldProtocol<NetIO, uint64_t> *relu_oracle;
-  if (tid & 1) {
-    relu_oracle = new ReLUFieldProtocol<NetIO, uint64_t>(
-        3 - party, FIELD, ioArr[tid], bitlength, b, prime_mod, otpackArr[tid]);
-  } else {
-    relu_oracle = new ReLUFieldProtocol<NetIO, uint64_t>(
-        party, FIELD, ioArr[tid], bitlength, b, prime_mod, otpackArr[tid]);
-  }
-  if (batch_size) {
-    for (int j = 0; j < lnum_relu; j += batch_size) {
-      if (batch_size <= lnum_relu - j) {
-        relu_oracle->relu(z + j, x + j, batch_size);
-      } else {
-        relu_oracle->relu(z + j, x + j, lnum_relu - j);
-      }
+    ReLUFieldProtocol<NetIO, uint64_t> *relu_oracle;
+    if (tid & 1) {
+        relu_oracle = new ReLUFieldProtocol<NetIO, uint64_t>(
+            3 - party, FIELD, ioArr[tid], bitlength, b, prime_mod,
+            otpackArr[tid]
+        );
+    } else {
+        relu_oracle = new ReLUFieldProtocol<NetIO, uint64_t>(
+            party, FIELD, ioArr[tid], bitlength, b, prime_mod, otpackArr[tid]
+        );
     }
-  } else {
-    relu_oracle->relu(z, x, lnum_relu);
-  }
+    if (batch_size) {
+        for (int j = 0; j < lnum_relu; j += batch_size) {
+            if (batch_size <= lnum_relu - j) {
+                relu_oracle->relu(z + j, x + j, batch_size);
+            } else {
+                relu_oracle->relu(z + j, x + j, lnum_relu - j);
+            }
+        }
+    } else {
+        relu_oracle->relu(z, x, lnum_relu);
+    }
 
-  delete relu_oracle;
-  return;
+    delete relu_oracle;
+    return;
 }
 
 int main(int argc, char **argv) {
-  /************* Argument Parsing  ************/
-  /********************************************/
+    /************* Argument Parsing  ************/
+    /********************************************/
 
-  ArgMapping amap;
-  amap.arg("r", party, "Role of party: ALICE = 1; BOB = 2");
-  amap.arg("p", port, "Port Number");
-  amap.arg("N", num_relu, "Number of ReLUs");
-  amap.arg("b", b, "Radix base");
-  amap.arg("bt", batch_size, "Batch size as a power of 2 (No batching = 0)");
-  amap.arg("network", network,
-           "Network Type: sq - SqNet, res - ResNet50, dense - DenseNet121");
-  amap.arg("l", bitlength, "Bitlength of inputs");
-  amap.parse(argc, argv);
-  prime_mod = sci::default_prime_mod.at(bitlength);
+    ArgMapping amap;
+    amap.arg("r", party, "Role of party: ALICE = 1; BOB = 2");
+    amap.arg("p", port, "Port Number");
+    amap.arg("N", num_relu, "Number of ReLUs");
+    amap.arg("b", b, "Radix base");
+    amap.arg("bt", batch_size, "Batch size as a power of 2 (No batching = 0)");
+    amap.arg(
+        "network", network,
+        "Network Type: sq - SqNet, res - ResNet50, dense - DenseNet121"
+    );
+    amap.arg("l", bitlength, "Bitlength of inputs");
+    amap.parse(argc, argv);
+    prime_mod = sci::default_prime_mod.at(bitlength);
 
-  if (batch_size > 0) {
-    batch_size = 1 << batch_size;
-  }
-  if (network != "none") {
-    num_relu = 0;
-    network_layer_sizes = layer_sizes.at(network);
-    for (size_t i = 0; i < network_layer_sizes.size(); i++) {
-      num_relu_orig += network_layer_sizes[i];
-      num_relu += ((network_layer_sizes[i] + 7) / 8) * 8;
+    if (batch_size > 0) {
+        batch_size = 1 << batch_size;
     }
-    if (network == "res")
-      bitlength = 37;
-    else
-      bitlength = 32;
-  } else {
-    num_relu_orig = num_relu;
-    num_relu = ((num_relu + 7) / 8) * 8;
-  }
-
-  cout << "========================================================" << endl;
-  cout << "Role: " << party << " - Bitlength: " << bitlength
-       << " - Radix Base: " << b << "\n# ReLUs: " << num_relu_orig
-       << " - Batch Size: " << batch_size << " - # Threads: " << num_threads
-       << endl;
-  cout << "========================================================" << endl;
-
-  /************ Generate Test Data ************/
-  /********************************************/
-
-  sci::PRG128 prg;
-  uint64_t mask_l;
-  if (bitlength == 64)
-    mask_l = -1;
-  else
-    mask_l = (1ULL << bitlength) - 1;
-  uint64_t *x = new uint64_t[num_relu];
-  uint64_t *z = new uint64_t[num_relu];
-  prg.random_mod_p<uint64_t>(x, num_relu, prime_mod);
-
-  /********** Setup IO and Base OTs ***********/
-  /********************************************/
-
-  for (int i = 0; i < num_threads; i++) {
-    ioArr[i] = new NetIO(party == 1 ? nullptr : address.c_str(), port + i);
-    if (i & 1) {
-      otpackArr[i] = new OTPack<NetIO>(ioArr[i], 3 - party);
-    } else {
-      otpackArr[i] = new OTPack<NetIO>(ioArr[i], party);
-    }
-  }
-  std::cout << "All Base OTs Done" << std::endl;
-
-  /************** Fork Threads ****************/
-  /********************************************/
-
-  uint64_t comm_sent = 0;
-  uint64_t multiThreadedIOStart[num_threads];
-  for (int i = 0; i < num_threads; i++) {
-    multiThreadedIOStart[i] = ioArr[i]->counter;
-  }
-  auto start = clock_start();
-  if (network != "none") {
-    int layer_offset = 0;
-    for (size_t layer_idx = 0; layer_idx < network_layer_sizes.size();
-         layer_idx++) {
-      std::thread relu_threads[num_threads];
-      int layer_size = ((network_layer_sizes[layer_idx] + 7) / 8) * 8;
-      int chunk_size = (layer_size / (8 * num_threads)) * 8;
-      cout << "Layer_idx: " << layer_idx << "; Layer_size: " << layer_size
-           << endl;
-      for (int i = 0; i < num_threads; ++i) {
-        int offset = i * chunk_size + layer_offset;
-        int lnum_relu;
-        if (i == (num_threads - 1)) {
-          lnum_relu = (layer_offset + layer_size) - offset;
-        } else {
-          lnum_relu = chunk_size;
+    if (network != "none") {
+        num_relu = 0;
+        network_layer_sizes = layer_sizes.at(network);
+        for (size_t i = 0; i < network_layer_sizes.size(); i++) {
+            num_relu_orig += network_layer_sizes[i];
+            num_relu += ((network_layer_sizes[i] + 7) / 8) * 8;
         }
-        relu_threads[i] = std::thread(field_relu_thread, i, z + offset,
-                                      x + offset, lnum_relu);
-      }
-      for (int i = 0; i < num_threads; ++i) {
-        relu_threads[i].join();
-      }
-      layer_offset += layer_size;
+        if (network == "res")
+            bitlength = 37;
+        else
+            bitlength = 32;
+    } else {
+        num_relu_orig = num_relu;
+        num_relu = ((num_relu + 7) / 8) * 8;
     }
-  } else {
-    std::thread relu_threads[num_threads];
-    int chunk_size = (num_relu / (8 * num_threads)) * 8;
-    for (int i = 0; i < num_threads; ++i) {
-      int offset = i * chunk_size;
-      int lnum_relu;
-      if (i == (num_threads - 1)) {
-        lnum_relu = num_relu - offset;
-      } else {
-        lnum_relu = chunk_size;
-      }
-      relu_threads[i] =
-          std::thread(field_relu_thread, i, z + offset, x + offset, lnum_relu);
+
+    cout << "========================================================" << endl;
+    cout << "Role: " << party << " - Bitlength: " << bitlength
+         << " - Radix Base: " << b << "\n# ReLUs: " << num_relu_orig
+         << " - Batch Size: " << batch_size << " - # Threads: " << num_threads
+         << endl;
+    cout << "========================================================" << endl;
+
+    /************ Generate Test Data ************/
+    /********************************************/
+
+    sci::PRG128 prg;
+    uint64_t mask_l;
+    if (bitlength == 64)
+        mask_l = -1;
+    else
+        mask_l = (1ULL << bitlength) - 1;
+    uint64_t *x = new uint64_t[num_relu];
+    uint64_t *z = new uint64_t[num_relu];
+    prg.random_mod_p<uint64_t>(x, num_relu, prime_mod);
+
+    /********** Setup IO and Base OTs ***********/
+    /********************************************/
+
+    for (int i = 0; i < num_threads; i++) {
+        ioArr[i] = new NetIO(party == 1 ? nullptr : address.c_str(), port + i);
+        if (i & 1) {
+            otpackArr[i] = new OTPack<NetIO>(ioArr[i], 3 - party);
+        } else {
+            otpackArr[i] = new OTPack<NetIO>(ioArr[i], party);
+        }
     }
-    for (int i = 0; i < num_threads; ++i) {
-      relu_threads[i].join();
+    std::cout << "All Base OTs Done" << std::endl;
+
+    /************** Fork Threads ****************/
+    /********************************************/
+
+    uint64_t comm_sent = 0;
+    uint64_t multiThreadedIOStart[num_threads];
+    for (int i = 0; i < num_threads; i++) {
+        multiThreadedIOStart[i] = ioArr[i]->counter;
     }
-  }
-  long long t = time_from(start);
-  for (int i = 0; i < num_threads; i++) {
-    auto curComm = (ioArr[i]->counter) - multiThreadedIOStart[i];
-    comm_sent += curComm;
-  }
-  std::cout << "Comm. Sent/ell: "
-            << double(comm_sent * 8) / (bitlength * num_relu) << std::endl;
-
-  /************** Verification ****************/
-  /********************************************/
-
-  switch (party) {
-  case sci::ALICE: {
-    ioArr[0]->send_data(x, sizeof(uint64_t) * num_relu);
-    ioArr[0]->send_data(z, sizeof(uint64_t) * num_relu);
-    break;
-  }
-  case sci::BOB: {
-    uint64_t *xi = new uint64_t[num_relu];
-    uint64_t *zi = new uint64_t[num_relu];
-    ioArr[0]->recv_data(xi, sizeof(uint64_t) * num_relu);
-    ioArr[0]->recv_data(zi, sizeof(uint64_t) * num_relu);
-
-    for (int i = 0; i < num_relu; i++) {
-      xi[i] = (xi[i] + x[i]) % prime_mod;
-      zi[i] = (zi[i] + z[i]) % prime_mod;
-      assert((zi[i] == ((xi[i] <= prime_mod / 2) * xi[i])) &&
-             "ReLU protocol's answer is incorrect!");
+    auto start = clock_start();
+    if (network != "none") {
+        int layer_offset = 0;
+        for (size_t layer_idx = 0; layer_idx < network_layer_sizes.size();
+             layer_idx++) {
+            std::thread relu_threads[num_threads];
+            int layer_size = ((network_layer_sizes[layer_idx] + 7) / 8) * 8;
+            int chunk_size = (layer_size / (8 * num_threads)) * 8;
+            cout << "Layer_idx: " << layer_idx << "; Layer_size: " << layer_size
+                 << endl;
+            for (int i = 0; i < num_threads; ++i) {
+                int offset = i * chunk_size + layer_offset;
+                int lnum_relu;
+                if (i == (num_threads - 1)) {
+                    lnum_relu = (layer_offset + layer_size) - offset;
+                } else {
+                    lnum_relu = chunk_size;
+                }
+                relu_threads[i] = std::thread(
+                    field_relu_thread, i, z + offset, x + offset, lnum_relu
+                );
+            }
+            for (int i = 0; i < num_threads; ++i) {
+                relu_threads[i].join();
+            }
+            layer_offset += layer_size;
+        }
+    } else {
+        std::thread relu_threads[num_threads];
+        int chunk_size = (num_relu / (8 * num_threads)) * 8;
+        for (int i = 0; i < num_threads; ++i) {
+            int offset = i * chunk_size;
+            int lnum_relu;
+            if (i == (num_threads - 1)) {
+                lnum_relu = num_relu - offset;
+            } else {
+                lnum_relu = chunk_size;
+            }
+            relu_threads[i] = std::thread(
+                field_relu_thread, i, z + offset, x + offset, lnum_relu
+            );
+        }
+        for (int i = 0; i < num_threads; ++i) {
+            relu_threads[i].join();
+        }
     }
-    delete[] xi;
-    delete[] zi;
-    cout << "ReLU Tests Passing" << endl;
-    break;
-  }
-  }
-  delete[] x;
-  delete[] z;
+    long long t = time_from(start);
+    for (int i = 0; i < num_threads; i++) {
+        auto curComm = (ioArr[i]->counter) - multiThreadedIOStart[i];
+        comm_sent += curComm;
+    }
+    std::cout << "Comm. Sent/ell: "
+              << double(comm_sent * 8) / (bitlength * num_relu) << std::endl;
 
-  cout << "Number of ReLU/s:\t" << (double(num_relu) / t) * 1e6 << std::endl;
-  cout << "ReLU Time (bitlength=" << bitlength << "; b=" << b << ")\t" << t
-       << " mus" << endl;
+    /************** Verification ****************/
+    /********************************************/
 
-  /******************* Cleanup ****************/
-  /********************************************/
+    switch (party) {
+        case sci::ALICE: {
+            ioArr[0]->send_data(x, sizeof(uint64_t) * num_relu);
+            ioArr[0]->send_data(z, sizeof(uint64_t) * num_relu);
+            break;
+        }
+        case sci::BOB: {
+            uint64_t *xi = new uint64_t[num_relu];
+            uint64_t *zi = new uint64_t[num_relu];
+            ioArr[0]->recv_data(xi, sizeof(uint64_t) * num_relu);
+            ioArr[0]->recv_data(zi, sizeof(uint64_t) * num_relu);
 
-  for (int i = 0; i < num_threads; i++) {
-    delete ioArr[i];
-    delete otpackArr[i];
-  }
-  return 0;
+            for (int i = 0; i < num_relu; i++) {
+                xi[i] = (xi[i] + x[i]) % prime_mod;
+                zi[i] = (zi[i] + z[i]) % prime_mod;
+                assert(
+                    (zi[i] == ((xi[i] <= prime_mod / 2) * xi[i])) &&
+                    "ReLU protocol's answer is incorrect!"
+                );
+            }
+            delete[] xi;
+            delete[] zi;
+            cout << "ReLU Tests Passing" << endl;
+            break;
+        }
+    }
+    delete[] x;
+    delete[] z;
+
+    cout << "Number of ReLU/s:\t" << (double(num_relu) / t) * 1e6 << std::endl;
+    cout << "ReLU Time (bitlength=" << bitlength << "; b=" << b << ")\t" << t
+         << " mus" << endl;
+
+    /******************* Cleanup ****************/
+    /********************************************/
+
+    for (int i = 0; i < num_threads; i++) {
+        delete ioArr[i];
+        delete otpackArr[i];
+    }
+    return 0;
 }

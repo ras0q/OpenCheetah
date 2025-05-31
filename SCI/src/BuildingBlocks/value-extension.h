@@ -26,27 +26,43 @@ SOFTWARE.
 #include "Millionaire/millionaire.h"
 
 class XTProtocol {
-public:
-  sci::NetIO *io = nullptr;
-  sci::OTPack<sci::NetIO> *otpack;
-  TripleGenerator<sci::NetIO> *triple_gen = nullptr;
-  MillionaireProtocol<sci::NetIO> *millionaire = nullptr;
-  AuxProtocols *aux = nullptr;
-  bool del_aux = false;
-  int party;
+   public:
+    sci::NetIO *io = nullptr;
+    sci::OTPack<sci::NetIO> *otpack;
+    TripleGenerator<sci::NetIO> *triple_gen = nullptr;
+    MillionaireProtocol<sci::NetIO> *millionaire = nullptr;
+    AuxProtocols *aux = nullptr;
+    bool del_aux = false;
+    int party;
 
-  // Constructor
-  XTProtocol(int party, sci::NetIO *io, sci::OTPack<sci::NetIO> *otpack,
-             AuxProtocols *auxp = nullptr);
+    // Constructor
+    XTProtocol(
+        int party,
+        sci::NetIO *io,
+        sci::OTPack<sci::NetIO> *otpack,
+        AuxProtocols *auxp = nullptr
+    );
 
-  // Destructor
-  ~XTProtocol();
+    // Destructor
+    ~XTProtocol();
 
-  void z_extend(int32_t dim, uint64_t *inA, uint64_t *outB, int32_t bwA,
-                int32_t bwB, uint8_t *msbA = nullptr);
+    void z_extend(
+        int32_t dim,
+        uint64_t *inA,
+        uint64_t *outB,
+        int32_t bwA,
+        int32_t bwB,
+        uint8_t *msbA = nullptr
+    );
 
-  void s_extend(int32_t dim, uint64_t *inA, uint64_t *outB, int32_t bwA,
-                int32_t bwB, uint8_t *msbA = nullptr);
+    void s_extend(
+        int32_t dim,
+        uint64_t *inA,
+        uint64_t *outB,
+        int32_t bwA,
+        int32_t bwB,
+        uint8_t *msbA = nullptr
+    );
 };
 
-#endif // ZERO_EXT_H__
+#endif  // ZERO_EXT_H__

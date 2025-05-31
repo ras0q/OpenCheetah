@@ -22,8 +22,8 @@ SOFTWARE.
 #ifndef DEFINES_HE_H__
 #define DEFINES_HE_H__
 
-#include <cstdint>
 #include <cmath>
+#include <cstdint>
 // #define HE_DEBUG
 
 extern uint64_t prime_mod;
@@ -39,4 +39,4 @@ const int32_t SMUDGING_BITLEN = 100 - bitlength;
  * https://stackoverflow.com/questions/466204/rounding-up-to-next-power-of-2 */
 inline int next_pow2(int val) { return pow(2, ceil(log(val) / log(2))); }
 
-#endif // DEFINES_HE_H__
+#endif  // DEFINES_HE_H__

@@ -1,24 +1,23 @@
 #ifndef PERFORMANCE_H
 #define PERFORMANCE_H
 
+#include <chrono>
 #include <ctime>
-#include <string>
 #include <iostream>
 #include <stack>
+#include <string>
 #include <utility>
-#include <chrono>
 
-using std::chrono::high_resolution_clock;
-using std::chrono::duration_cast;
-using std::chrono::milliseconds;
-using std::stack;
 using std::pair;
+using std::stack;
 using std::string;
-
+using std::chrono::duration_cast;
+using std::chrono::high_resolution_clock;
+using std::chrono::milliseconds;
 
 inline double time_log(string tag) {
     static stack<pair<string, high_resolution_clock::time_point>> sentinel;
-    
+
     if (sentinel.empty() || sentinel.top().first != tag) {
         auto start = high_resolution_clock::now();
         sentinel.push(make_pair(tag, start));
@@ -28,13 +27,12 @@ inline double time_log(string tag) {
     else {
         auto start = sentinel.top().second;
         auto end = high_resolution_clock::now();
-        double duration = duration_cast<milliseconds>(end-start).count() * 1.0;
-        std::cout << "[Time] " << tag << ": " 
-            << duration 
-            << " ms" << std::endl;
+        double duration =
+            duration_cast<milliseconds>(end - start).count() * 1.0;
+        std::cout << "[Time] " << tag << ": " << duration << " ms" << std::endl;
         sentinel.pop();
         return duration;
     }
 }
 
-#endif // PERFORMANCE_H
+#endif  // PERFORMANCE_H

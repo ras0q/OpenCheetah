@@ -35,8 +35,9 @@ SOFTWARE.
 #define TRUNCATION_RESCALING
 #endif
 
-#include <fstream>
 #include <stdint.h>
+
+#include <fstream>
 #include <string>
 
 #define RESET "\033[0m"

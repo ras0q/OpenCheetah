@@ -9,14 +9,14 @@
 #include <string>
 
 namespace seal {
-class SEALContext;
-class Ciphertext;
-class Plaintext;
-class GaloisKeys;
-class Encryptor;
-class Decryptor;
-class Evaluator;
-class KSwitchKeys;
+    class SEALContext;
+    class Ciphertext;
+    class Plaintext;
+    class GaloisKeys;
+    class Encryptor;
+    class Decryptor;
+    class Evaluator;
+    class KSwitchKeys;
 };  // namespace seal
 
 using F64 = double;
@@ -28,15 +28,15 @@ using RLWECt = seal::Ciphertext;
 using RLWEPt = seal::Plaintext;
 
 enum class Code {
-  OK,
-  ERR_CONFIG,
-  ERR_NULL_POINTER,
-  ERR_DIM_MISMATCH,
-  ERR_SEAL_MEMORY,
-  ERR_KEY_MISSING,
-  ERR_OUT_BOUND,
-  ERR_INVALID_ARG,
-  ERR_INTERNAL,
+    OK,
+    ERR_CONFIG,
+    ERR_NULL_POINTER,
+    ERR_DIM_MISMATCH,
+    ERR_SEAL_MEMORY,
+    ERR_KEY_MISSING,
+    ERR_OUT_BOUND,
+    ERR_INVALID_ARG,
+    ERR_INTERNAL,
 };
 
 std::string CodeMessage(Code code);

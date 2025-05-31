@@ -23,15 +23,16 @@ SOFTWARE.
 #ifndef GLOBALS_H___
 #define GLOBALS_H___
 
+#include <chrono>
+#include <cstdint>
+#include <thread>
+
 #include "NonLinear/argmax.h"
 #include "NonLinear/maxpool.h"
 #include "NonLinear/relu-interface.h"
 #include "OT/kkot.h"
 #include "defines.h"
 #include "defines_uniform.h"
-#include <chrono>
-#include <cstdint>
-#include <thread>
 #ifdef SCI_OT
 #include "BuildingBlocks/aux-protocols.h"
 #include "BuildingBlocks/truncation.h"
@@ -150,4 +151,4 @@ extern uint64_t ArgMaxCommSent;
 extern uint64_t CountElementMul;
 #endif
 
-#endif // GLOBALS_H__
+#endif  // GLOBALS_H__
